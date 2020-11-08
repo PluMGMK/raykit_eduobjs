@@ -175,33 +175,6 @@ fn main() -> std::io::Result<()> {
                 COLOUR_CODE_MD5,
                 "Checksum doesn't match for colouring code in EDU EXE - you may have the wrong (version of the) {} file!", SRC_EXE);
 
-    /*// This colour code is a bit more involved. We want to turn this chunk of code into a function
-    // that returns a single bit (let's use the Carry Flag). The chunk we actually took includes a
-    // lot of irrelevant code, since we need to get to the destination of the last jump instruction
-    // (a "jnz" on the last "cmp"). We can replace this irrelevant code with a "stc" to set the
-    // aforementioned Carry Flag, and a near return, and pad the rest of it with nops.
-    //
-    // Another complication is that the EDU and KIT EXEs don't use the same register in this case
-    // (whereas they did for the frame code), so we need to exchange them...
-    let mut patched_colour_code = colour_code.to_vec();
-    let irrelevant_code = &mut patched_colour_code[(0x9e12 - COLOUR_CODE_SRC.start)..];
-    assert_eq!(&irrelevant_code[..3],
-               &[0x8A, 0xB5, 0x86],
-               "Verification failure even though checksum was OK... You should never see this message!");
-    irrelevant_code[..5].copy_from_slice(&[0x66, 0x87, 0xF1, // xchg cx, si
-                                        0xF9, // stc
-                                        0xC3]); // retn
-    // Pad the rest with nops
-    for i in 5..(irrelevant_code.len()) {
-        irrelevant_code[i] = 0x90;
-    }
-
-    // Now add on the returning code at the end of the function (i.e. when the answer is "no, EDU
-    // doesn't think this type is multi-coloured").
-    patched_colour_code.extend_from_slice(&[0x66, 0x87, 0xF1, // xchg cx, si
-                                          0xF8, // clc
-                                          0xC3]); // retn*/
-
     // The fun part: put the code into the destination (i.e. KIT) EXE!
     exes[1].entry_object_mut()
         .update_data(|old_data| {
