@@ -54,16 +54,25 @@ const FRAMESCROLL_CODE_BLOB: [u8; 204] = [
     0xfa, 0x10, 0x01, 0xc3
 ];
 
-const SAMPLENOTATION_CODE_DST:std::ops::Range<usize> = 0x2642b..0x26437;
-const SAMPLENOTATION_ORIG_CODE_MD5:&str = "1c86cf29f168723e20237fad14571202";
+const SAMPLENOTATION_CODE_DST:std::ops::Range<usize> = 0x2645e..0x26463;
+const VSPRINTF_FUNCPTR:i32 = 0x762e9;
+const GET_SAMPLE_NAME_FUNCPTR:i32 = 0x647ac;
+
+// Ranges of bytes in the following blob that need to be replaced with relative pointers to
+// vsprintf.
+const SAMPLENOTATION_VSPRINTF_PTRLOC1:std::ops::Range<usize> = 7..11;
+const SAMPLENOTATION_VSPRINTF_PTRLOC2:std::ops::Range<usize> = 25..29;
+// And relative pointers to GET_SAMPLE_NAME.
+const SAMPLENOTATION_GSNAME_PTRLOC:std::ops::Range<usize> = 16..20;
 
 // Assembled from samplenotationcode.asm using UASM (https://github.com/Terraspace/UASM)
 // and formatted using hx (https://github.com/sitkevij/hex).
-const SAMPLENOTATION_CODE_BLOB: [u8; 32] = [
-    0x66, 0x81, 0xfa, 0x07, 0x01, 0x74, 0x05, 0x66, 0x81, 0xfa, 
-    0x0a, 0x01, 0xc3, 0x33, 0xc0, 0x66, 0x81, 0xfa, 0x07, 0x01, 
-    0x75, 0x06, 0x66, 0x8b, 0x43, 0x50, 0xeb, 0x03, 0x8a, 0x43, 
-    0x7b, 0xc3
+// Included only up as far as the first ret (and even that's technically not needed)
+const SAMPLENOTATION_CODE_BLOB: [u8; 30] = [
+    0x66, 0x81, 0xfa, 0x07, 0x01, 0x0f, 0x85, 0x93, 0x00, 0x00, 
+    0x00, 0x0f, 0xb7, 0x43, 0x50, 0xe8, 0x09, 0x00, 0x00, 0x00, 
+    0x89, 0x44, 0x24, 0x0c, 0xe9, 0x81, 0x00, 0x00, 0x00, 0xc3
+    
 ];
 
 // Assembled from colourcode.asm using UASM (https://github.com/Terraspace/UASM)
@@ -277,32 +286,34 @@ fn main() -> std::io::Result<()> {
             // This will be its address:
             let newfunc_address = old_data.len();
 
+            // Replace the dummy pointers with real ones.
+            let mut updated_blob = SAMPLENOTATION_CODE_BLOB.to_vec();
+
+            let next_eip_vsprintf1 = (newfunc_address + SAMPLENOTATION_VSPRINTF_PTRLOC1.end) as i32;
+            updated_blob[SAMPLENOTATION_VSPRINTF_PTRLOC1].copy_from_slice(&(VSPRINTF_FUNCPTR - next_eip_vsprintf1).to_le_bytes());
+            let next_eip_vsprintf2 = (newfunc_address + SAMPLENOTATION_VSPRINTF_PTRLOC2.end) as i32;
+            updated_blob[SAMPLENOTATION_VSPRINTF_PTRLOC2].copy_from_slice(&(VSPRINTF_FUNCPTR - next_eip_vsprintf2).to_le_bytes());
+
+            let next_eip_gsname = (newfunc_address + SAMPLENOTATION_GSNAME_PTRLOC.end) as i32;
+            updated_blob[SAMPLENOTATION_GSNAME_PTRLOC].copy_from_slice(&(GET_SAMPLE_NAME_FUNCPTR - next_eip_gsname).to_le_bytes());
+
             let mut new_data = old_data.to_vec(); // Turn it into a vector...
-            new_data.extend_from_slice(&SAMPLENOTATION_CODE_BLOB); // And add the new code.
+            new_data.append(&mut updated_blob); // And add the new code.
 
             // Now we need to pull out the original code and replace it with a call to our new
             // function.
-            let original_code = &new_data[SAMPLENOTATION_CODE_DST];
-            let original_md5 = md5::compute(original_code);
-            assert_eq!(format!("{:x}", original_md5),
-                        SAMPLENOTATION_ORIG_CODE_MD5,
-                        "Checksum doesn't match for code to be replaced with frame-freeze in KIT EXE - you may have the wrong (version of the) {} file!", exe_name);
-            // Apparently taking the MD5 moves the slice, so I have to take it again...
             let original_code = &mut new_data[SAMPLENOTATION_CODE_DST];
-            original_code[0] = 0xE8; // Opcode for near call...
+            // We're replacing a call to vsprintf with a call to our own function.
+            // So we expect to find the opcode for a near call here already.
+            assert_eq!(original_code[0], 0xE8,
+                    "Near call not found at expected address for sample notation - you may have the wrong (version of the) {} file!", exe_name);
+            // Make sure it's calling what we expect it to.
+            let next_eip = (SAMPLENOTATION_CODE_DST.start + 5) as i32;
+            assert_eq!(&original_code[1..5], &(VSPRINTF_FUNCPTR - next_eip).to_le_bytes(),
+                    "vsprintf function not located at expected address - you may have the wrong (version of the) {} file!", exe_name);
             // Near call takes an address relative to the *end* of the call instruction itself
             // (which is 5 bytes long - the opcode plus the 32-bit address).
-            let next_eip = (SAMPLENOTATION_CODE_DST.start + 5) as u32;
-            original_code[1..5].copy_from_slice(&(newfunc_address as u32 - next_eip).to_le_bytes());
-
-            // The next thing is a jnz (2 bytes), which we leave intact...
-            //
-            // Then there are two instructions that happen to add up to five bytes, for loading the
-            // hitpoints into the EAX register.
-            original_code[7] = 0xE8; // Near call again.
-            let next_eip = SAMPLENOTATION_CODE_DST.end as u32;
-            let newfunc_address = newfunc_address + 13; // Offset for the second function in this blob (for loading hitpoints).
-            original_code[8..12].copy_from_slice(&(newfunc_address as u32 - next_eip).to_le_bytes());
+            original_code[1..5].copy_from_slice(&(newfunc_address as i32 - next_eip).to_le_bytes());
 
             // If all that succeeds, we can return the new data vector...
             new_data
@@ -375,7 +386,7 @@ fn main() -> std::io::Result<()> {
             // This should already be a near call since we replaced it just above, for the
             // colouring code.
             assert_eq!(original_code[0], 0xE8,
-                    "Near call not found at expected address for frame saving");
+                    "Near call not found at expected address for frame saving - you may have the wrong (version of the) {} file!", exe_name);
             // Near call takes an address relative to the *end* of the call instruction itself
             // (which is 5 bytes long - the opcode plus the 32-bit address).
             let next_eip = (FRAMESAVE_CODE_DST.start + 5) as u32;
