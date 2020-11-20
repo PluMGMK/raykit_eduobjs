@@ -36,12 +36,30 @@ $ cd ray1_unlocklang
 $ cargo run --release -- /PATH/TO/RAYKIT.EXE
 ```
 
+# Additions to the Events Editor
+
+As of 0.3.0, this patcher also restores most of the missing editor functionality for Edutainment objects. I've implemented the functionality described in this unused help string:
+```
+Special Keys in EVENT editor
+'up or down arrow' Change color or scroll samples per 50
+'right or left arrow' Change frame (size,icon,number or sample)
+```
+
+When you hover over a letter or number in the editor, it will include the "color" number in the name you see at the bottom of the screen, but not the frame number. When you hover over a sound sample, it will simply show the sample name (e.g. "PERDU", "CHERCHE", etc.).
+
+Saving and loading also works, although you need to make sure you use the right event names in your `EVE.MLT` file:
+* Letters should start with `MS_edul_`
+* Numbers should start with `MS_educ_` (for *chiffre*)
+* Artworks should start with `MS_icon`
+* Sound samples should be called `MS_sample`
+
+Also, if you share a level using these events, the end user also needs to have patched their copy of Rayman Designer with this tool.
+
 # Limitations
 
 * This has only been tested on the GOG version and may not work on others.
 * This does not provide the sprites for letters, numbers and artworks. You need to use [Ray1Map](https://github.com/Adsolution/Ray1Map) to extract them from an Educational game.
-* If you add letters and numbers to your EVE.MLT file, the Events Editor will enable you to change their colours after you apply this patch.
-However, you can't use the Events Editor to change the frame, so your letters will be stuck in uppercase and you can't really use the artworks. You need Ray1Map for that.
-  - The reason for this is that the colour-changing code is already in stock Rayman Designer (for Tings and butterflies), so I just needed to change some conditionals to make it apply to letters and numbers.
-The frame-changing code seems to have been removed altogether though, so I'd have to re-implement it from scratch.
-I'm not sure if it's even possible, given that the Events Editor uses a different format for storing data, which may not include the frame info (I'll have to check).
+* This does not provide any sound samples beyond the 26 available in stock Rayman Designer (but these do include the gendoor sounds from Edutainment). I'm pretty sure there's a way to copy more samples over from the Edutainment games, but I haven't looked into it yet.
+  - By the way, since there are only 26 samples, the "scroll samples per 50" functionality doesn't work. However, if you somehow add 25 or more extra samples to your game (again, I need to look into it), it will work.
+* When you place a sample in your map, it probably won't play until you save, quit and reenter the level. This is because samples are loaded selectively when a map is loaded.
+  - I may fix this in the next version
