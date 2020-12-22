@@ -32,7 +32,7 @@ Note: I've only tested this on the GOG version of Rayman Designer, so it may fai
 Alternatively, if you're comfortable with the command line and have a Rust nightly toolchain installed, you can do this to compile it yourself:
 ```
 $ git clone https://github.com/PluMGMK/raykit_eduobjs.git
-$ cd ray1_unlocklang
+$ cd raykit_eduobjs
 $ cargo run --release -- /PATH/TO/RAYKIT.EXE
 ```
 
